@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+import logging
 import requests
 import redis
 import xml.etree.ElementTree as ET
@@ -10,6 +11,8 @@ from geopy.geocoders import Nominatim
 
 app = Flask(__name__)
 redis_client = redis.Redis(host="redis", port=6379, decode_responses=True)
+
+logging.basicConfig(level=logging.DEBUG)
 
 URL = "https://nasa-public-data.s3.amazonaws.com/iss-coords/current/ISS_OEM/ISS.OEM_J2K_EPH.xml"
 
@@ -122,7 +125,16 @@ def get_now():
     """Return instantaneous speed, latitude, longitude, altitude, and geoposition for the closest epoch."""
     closest = find_closest_epoch()
     speed = calculate_speed(closest["x_dot"], closest["y_dot"], closest["z_dot"])
-    geoposition = get_geoposition(closest["y"], closest["x"])  # Swap x/y for lat/lon
+    
+    # Log latitude and longitude before passing to geopy
+    logging.debug(f"Latitude (y): {closest['y']}, Longitude (x): {closest['x']}")
+
+    try:
+        geoposition = get_geoposition(closest["y"], closest["x"])  # Swap x/y for lat/lon
+    except Exception as e:
+        logging.error(f"Error in get_geoposition: {e}")
+        geoposition = "Unknown location"
+
     return jsonify({
         **closest,
         "speed": speed,
