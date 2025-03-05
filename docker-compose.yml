@@ -1,0 +1,33 @@
+#Specify Docker Compose version
+version: "3.8"
+
+services:
+  #Define the Redis version
+  redis:
+    image: "redis:latest"  #use the official Redis image from Docker Hub
+    container_name: iss_redis  #name  the Redis container
+    restart: always  #makes Redis restarts if it crashes
+    volumes:
+      - ./data:/data  #mount a local "data" directory with Redis data
+    command: ["redis-server", "--save", "20", "1", "--loglevel", "warning"]
+    #Redis will save data every 20 seconds if at least 1 key has changed
+    #Log level "warning" --> reduce unnecessary logs.
+    ports:
+      - "6379:6379"  #Expose Redis on port 6379
+
+  #define the Flask app
+  flask_app:
+    build: .  #builds the Flask app from the Dockerfile in the current directory
+    container_name: iss_flask  #Namest the Flask container
+    restart: always  #Restart the Flask app automatically if it crashes
+    depends_on:
+      - redis  #makes sure Redis starts before the Flask app
+    ports:
+      - "5000:5000"  #Expose Flask on port 5000 (http://localhost:5000)
+    environment:
+      - FLASK_ENV=development  #Set Flask environment to development mode
+      - FLASK_APP=iss_tracker.py  #Define the core file for the Flask app
+    volumes:
+      - .:/app  #mount the current project directory into the container for live code updates
+    command: ["python", "iss_tracker.py"]  #Runs the Flask app
+
