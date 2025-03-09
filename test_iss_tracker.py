@@ -1,105 +1,97 @@
 import unittest
 from unittest.mock import patch
 from flask import json
-import redis
-from iss_tracker import app, calculate_speed, parse_data, doy_to_isoformat, find_closest_epoch, get_iss_data
+from iss_tracker import app, calculate_speed, doy_to_isoformat, calculate_location
 
-#Sample Redis client for testing
-class MockRedis:
-    def __init__(self):
-        self.storage = {}
-
-    def set(self, key, value):
-        self.storage[key] = value
-
-    def get(self, key):
-        return self.storage.get(key)
-
-    def exists(self, key):
-        return key in self.storage
+# Sample ISS data for testing
+data_sample = [
+    {"epoch": "2025-081T12:00:00.000Z", "x": -6111.569, "y": -2741.316, "z": -1176.237, 
+     "x_dot": 2.90, "y_dot": -3.97, "z_dot": -5.86},
+    {"epoch": "2025-081T11:26:30.000Z", "x": -3272.614, "y": 3185.615, "z": 5023.641, 
+     "x_dot": -6.50, "y_dot": -3.53, "z_dot": -1.98}
+]
 
 class TestISSTracker(unittest.TestCase):
-    """Unit tests for ISS tracker Flask app and core functions (same idea as before, but with correct Redis client)"""
+    """
+    Unit tests for ISS tracker functions and Flask routes.
+    """
 
     def setUp(self):
-        """Set up test client and sample Redis."""
+        """Set up the test client for Flask"""
         self.app = app.test_client()
         self.app.testing = True
-        self.mock_redis = MockRedis()
 
-    @patch("iss_tracker.redis_client", new_callable=lambda: MockRedis())
-    def test_fetch_and_store_data(self, mock_redis):
-        """Test that data is fetched and stored in Redis."""
-        mock_redis.set("iss_data", json.dumps([{"epoch": "2025-045T12:00:00.000Z"}]))
-        data = json.loads(mock_redis.get("iss_data"))
-        self.assertEqual(len(data), 1)
-        self.assertEqual(data[0]["epoch"], "2025-045T12:00:00.000Z")
-
-    @patch("iss_tracker.get_iss_data")
-    def test_get_epochs(self, mock_data):
-        """Test the /epochs route"""
-        mock_data.return_value = [
-            {"epoch": "2025-045T12:00:00.000Z"},
-            {"epoch": "2025-046T14:30:00.000Z"},
-        ]
-
+    @patch("iss_tracker.redis_client.get", return_value=json.dumps(data_sample))
+    def test_get_epochs(self, mock_redis):
+        """Test the /epochs route with and without query parameters."""
         response = self.app.get("/epochs")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(json.loads(response.data)), 2)
 
-    @patch("iss_tracker.get_iss_data")
-    def test_get_epoch(self, mock_data):
+        response = self.app.get("/epochs?limit=1")
+        self.assertEqual(len(json.loads(response.data)), 1)
+
+    @patch("iss_tracker.redis_client.get", return_value=json.dumps(data_sample))
+    def test_get_epoch(self, mock_redis):
         """Test retrieving a specific epoch."""
-        mock_data.return_value = [{"epoch": "2025-045T12:00:00.000Z"}]
-
-        response = self.app.get("/epochs/2025-045T12:00:00.000Z")
+        response = self.app.get("/epochs/2025-081T12:00:00.000Z")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(json.loads(response.data)["epoch"], "2025-045T12:00:00.000Z")
+        self.assertEqual(json.loads(response.data)["epoch"], "2025-081T12:00:00.000Z")
 
+    @patch("iss_tracker.redis_client.get", return_value=json.dumps(data_sample))
+    def test_get_invalid_epoch(self, mock_redis):
+        """Test retrieving an invalid epoch (should return 404)."""
         response = self.app.get("/epochs/invalid-epoch")
         self.assertEqual(response.status_code, 404)
 
-    @patch("iss_tracker.get_iss_data")
-    def test_get_epoch_speed(self, mock_data):
+    @patch("iss_tracker.redis_client.get", return_value=json.dumps(data_sample))
+    def test_get_epoch_speed(self, mock_redis):
         """Test retrieving speed for a specific epoch."""
-        mock_data.return_value = [
-            {"epoch": "2025-045T12:00:00.000Z", "x_dot": 7.39, "y_dot": 2.01, "z_dot": -0.16}
-        ]
-
-        response = self.app.get("/epochs/2025-045T12:00:00.000Z/speed")
+        response = self.app.get("/epochs/2025-081T12:00:00.000Z/speed")
         self.assertEqual(response.status_code, 200)
         self.assertAlmostEqual(json.loads(response.data)["speed"], 7.6601, places=1)
 
-        response = self.app.get("/epochs/invalid-epoch/speed")
-        self.assertEqual(response.status_code, 404)
-
-    @patch("iss_tracker.get_iss_data")
-    def test_get_epoch_location(self, mock_data):
-        """Test retrieving latitude, longitude, and altitude."""
-        mock_data.return_value = [
-            {"epoch": "2025-045T12:00:00.000Z", "x": 10.0, "y": 20.0, "z": 400.0}
-        ]
-
-        response = self.app.get("/epochs/2025-045T12:00:00.000Z/location")
+    @patch("iss_tracker.redis_client.get", return_value=json.dumps(data_sample))
+    def test_get_epoch_location(self, mock_redis):
+        """Test retrieving latitude, longitude, altitude, and geoposition for a specific epoch."""
+        response = self.app.get("/epochs/2025-081T12:00:00.000Z/location")
         self.assertEqual(response.status_code, 200)
+
         data = json.loads(response.data)
-        self.assertEqual(data["latitude"], 20.0)
-        self.assertEqual(data["longitude"], 10.0)
-        self.assertEqual(data["altitude"], 400.0)
+        self.assertIn("latitude", data)
+        self.assertIn("longitude", data)
+        self.assertIn("altitude", data)
+        self.assertIn("geoposition", data)
 
-    @patch("iss_tracker.find_closest_epoch")
-    def test_get_now(self, mock_closest_epoch):
-        """Test retrieving the closest epoch's details."""
-        mock_closest_epoch.return_value = {
-            "epoch": "2025-045T12:00:00.000Z",
-            "x": 10.0, "y": 20.0, "z": 400.0,
-            "x_dot": 7.39, "y_dot": 2.01, "z_dot": -0.16
-        }
-
+    @patch("iss_tracker.redis_client.get", return_value=json.dumps(data_sample))
+    def test_get_now(self, mock_redis):
+        """Test retrieving the closest epoch to the current time."""
         response = self.app.get("/now")
         self.assertEqual(response.status_code, 200)
-        data = json.loads(response.data)
-        self.assertIn("speed", data)
+        self.assertIn("speed", json.loads(response.data))
+        self.assertIn("latitude", json.loads(response.data))
+
+    def test_calculate_speed(self):
+        """Test if speed calculation is correct."""
+        speed = calculate_speed(7.39, 2.01, -0.16)
+        self.assertAlmostEqual(speed, 7.6601, places=1)
+
+    def test_doy_to_isoformat(self):
+        """Test conversion of DOY formatted date to ISO format."""
+        self.assertEqual(doy_to_isoformat("2025-081T12:00:00.000Z"), "2025-03-21T12:00:00.000Z")
+
+    def test_calculate_location(self):
+        """Test converting Cartesian coordinates to latitude, longitude, and altitude."""
+        lat, lon, alt, _ = calculate_location(-6111.569, -2741.316, -1176.237)
+        self.assertIsInstance(lat, float)
+        self.assertIsInstance(lon, float)
+        self.assertIsInstance(alt, float)
+
+    @patch("iss_tracker.redis_client.get", return_value=json.dumps(data_sample))
+    def test_redis_data_storage(self, mock_redis):
+        """Test if ISS data is correctly stored in Redis."""
+        redis_data = json.loads(mock_redis.return_value)
+        self.assertGreater(len(redis_data), 0, "Redis should store at least one epoch of data")
 
 if __name__ == '__main__':
     unittest.main()

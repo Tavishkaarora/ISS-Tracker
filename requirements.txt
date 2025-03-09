@@ -1,7 +1,5 @@
 flask
 requests
 redis
-flask-redis
 geopy
 pytest
-

@@ -1,0 +1,9 @@
+# Ignore Redis dump file
+__pycache__/
+*.pyc
+*.pyo
+data/
+ISS-Tracker/data/dump.rdb
+.env
+
+
