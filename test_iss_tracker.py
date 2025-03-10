@@ -40,7 +40,7 @@ class TestISSTracker(unittest.TestCase):
 
     @patch("iss_tracker.redis_client.get", return_value=json.dumps(data_sample))
     def test_get_invalid_epoch(self, mock_redis):
-        """Test retrieving an invalid epoch (should return 404)."""
+        """Test retrieving an invalid epoch (should return 404 Error)."""
         response = self.app.get("/epochs/invalid-epoch")
         self.assertEqual(response.status_code, 404)
 
