@@ -37,7 +37,7 @@ The ISS trajectory data is retrieved from NASA’s XML dataset:
   - **Position (X, Y, Z) in kilometers**
   - **Velocity (X_DOT, Y_DOT, Z_DOT) in km/s**
 
-## Diagram
+## Software Architecture Diagram
 ![Software Architecture Diagram](diagram.png)
 
 
