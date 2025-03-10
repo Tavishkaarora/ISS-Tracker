@@ -1,4 +1,4 @@
-# Ignore Redis dump file
+#Ignore Redis dump file
 __pycache__/
 *.pyc
 *.pyo
