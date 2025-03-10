@@ -21,7 +21,7 @@ geolocator = Nominatim(user_agent="iss_tracker")
 
 
 def fetch_data():
-    """Fetch and store ISS trajectory data in Redis if not already present"""
+    """Fetch and store ISS trajectory data in Redis if not already there"""
     if redis_client.exists("iss_data"):
         print("Data loaded from Redis")
     else:
@@ -33,7 +33,7 @@ def fetch_data():
 
 
 def parse_data(xml_data: str) -> List[Dict[str, float]]:
-    """Parse ISS XML data into a list of state vectors"""
+    """Convert ISS XML data into a list of state vectors"""
     root = ET.fromstring(xml_data)
     state_vectors = []
     for state_vector in root.findall(".//stateVector"):
@@ -57,7 +57,7 @@ def calculate_speed(x_dot: float, y_dot: float, z_dot: float) -> float:
 
 
 def doy_to_isoformat(epoch: str) -> str:
-    """Convert day-of-year (DOY) formatted date to ISO format, adjusting for potential off-by-one errors"""
+    """Convert day-of-year (DOY) formatted date to ISO format, adjusting for potential error where the date is off by one"""
     year, doy_time = epoch.split('-')
     doy, time = doy_time.split('T')
     date = datetime.datetime.strptime(f"{year}-{int(doy):03d}", "%Y-%j").date()
@@ -88,7 +88,7 @@ def calculate_location(x, y, z):
     lon = math.degrees(math.atan2(y, x))
 
     location = geolocator.reverse((lat, lon), language="en")
-    return lat, lon, altitude, location.address if location else "Unknown Location"
+    return lat, lon, altitude, location.address if location else "Geolocation Unknown"
 
 
 # ------------------------- Flask Routes -------------------------
